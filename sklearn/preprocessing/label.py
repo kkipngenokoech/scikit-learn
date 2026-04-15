@@ -130,6 +130,10 @@ class LabelEncoder(BaseEstimator, TransformerMixin):
         if _num_samples(y) == 0:
             return np.array([])
 
+        # Handle empty arrays early to avoid issues with np.unique on empty arrays
+        if len(y) == 0:
+            return np.array([], dtype=np.intp)
+
         classes = np.unique(y)
         if len(np.intersect1d(classes, self.classes_)) < len(classes):
             diff = np.setdiff1d(classes, self.classes_)
