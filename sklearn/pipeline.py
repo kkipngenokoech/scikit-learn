@@ -219,6 +219,16 @@ class Pipeline(_BaseComposition):
             return self.named_steps[ind]
         return est
 
+    def __len__(self):
+        """Returns the length of the Pipeline
+        
+        Returns
+        -------
+        length : int
+            Number of steps in the pipeline.
+        """
+        return len(self.steps)
+
     @property
     def _estimator_type(self):
         return self.steps[-1][1]._estimator_type
