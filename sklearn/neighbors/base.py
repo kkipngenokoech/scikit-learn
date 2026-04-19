@@ -55,6 +55,24 @@ def _check_weights(weights):
                          "'distance', or a callable function")
 
 
+def _check_n_neighbors(n_neighbors):
+    """Check to make sure n_neighbors is a valid integer"""
+    if n_neighbors is None:
+        return n_neighbors
+    
+    if isinstance(n_neighbors, float):
+        if n_neighbors.is_integer():
+            # Convert float that is actually an integer (e.g., 3.0) to int
+            return int(n_neighbors)
+        else:
+            raise ValueError("n_neighbors must be an integer, got: %r" % n_neighbors)
+    
+    if not isinstance(n_neighbors, int) or isinstance(n_neighbors, bool):
+        raise ValueError("n_neighbors must be an integer, got: %r" % n_neighbors)
+    
+    return n_neighbors
+
+
 def _get_weights(dist, weights):
     """Get the weights from an array of distances and a parameter ``weights``
 
@@ -327,6 +345,8 @@ class KNeighborsMixin(object):
 
         if n_neighbors is None:
             n_neighbors = self.n_neighbors
+        
+        n_neighbors = _check_n_neighbors(n_neighbors)
 
         if X is not None:
             query_is_train = False
@@ -466,6 +486,8 @@ class KNeighborsMixin(object):
         """
         if n_neighbors is None:
             n_neighbors = self.n_neighbors
+        
+        n_neighbors = _check_n_neighbors(n_neighbors)
 
         # kneighbors does the None handling.
         if X is not None:
