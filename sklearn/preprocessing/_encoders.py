@@ -111,7 +111,24 @@ class _BaseEncoder(BaseEstimator, TransformerMixin):
                     # removed later.
                     X_mask[:, i] = valid_mask
                     Xi = Xi.copy()
-                    Xi[~valid_mask] = self.categories_[i][0]
+                    
+                    # Check if we need to handle string dtype length issues
+                    replacement_value = self.categories_[i][0]
+                    if (hasattr(Xi, 'dtype') and 
+                        np.issubdtype(Xi.dtype, np.str_) and 
+                        hasattr(replacement_value, '__len__')):
+                        # For string arrays, ensure the dtype can accommodate the replacement
+                        max_len_needed = max(len(str(replacement_value)), 
+                                           Xi.dtype.itemsize // 4 if Xi.dtype.kind == 'U' else Xi.dtype.itemsize)
+                        if Xi.dtype.kind == 'U':  # Unicode string
+                            new_dtype = 'U{}'.format(max_len_needed)
+                        else:  # Byte string
+                            new_dtype = 'S{}'.format(max_len_needed)
+                        
+                        if Xi.dtype != np.dtype(new_dtype):
+                            Xi = Xi.astype(new_dtype)
+                    
+                    Xi[~valid_mask] = replacement_value
             _, encoded = _encode(Xi, self.categories_[i], encode=True)
             X_int[:, i] = encoded
 
