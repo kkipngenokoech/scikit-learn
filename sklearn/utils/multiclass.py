@@ -20,6 +20,31 @@ from .validation import check_array, _assert_all_finite
 from ..utils._array_api import get_namespace
 
 
+def _convert_nullable_pandas_dtype(y):
+    """Convert nullable pandas dtypes to their numpy equivalents.
+    
+    Parameters
+    ----------
+    y : array-like
+        Input array that may have nullable pandas dtypes.
+        
+    Returns
+    -------
+    y : array-like
+        Array with nullable pandas dtypes converted to numpy equivalents.
+    """
+    # Check if we have a pandas array with nullable dtype
+    if hasattr(y, 'dtype') and hasattr(y.dtype, 'name'):
+        dtype_name = y.dtype.name
+        if dtype_name == 'Int64':
+            return y.astype('int64')
+        elif dtype_name == 'Float64':
+            return y.astype('float64')
+        elif dtype_name == 'boolean':
+            return y.astype('bool')
+    return y
+
+
 def _unique_multiclass(y):
     xp, is_array_api = get_namespace(y)
     if hasattr(y, "__array__") or is_array_api:
@@ -73,6 +98,9 @@ def unique_labels(*ys):
     >>> unique_labels([1, 2, 10], [5, 11])
     array([ 1,  2,  5, 10, 11])
     """
+    # Convert nullable pandas dtypes to their numpy equivalents
+    ys = tuple(_convert_nullable_pandas_dtype(y) for y in ys)
+    
     xp, is_array_api = get_namespace(*ys)
     if not ys:
         raise ValueError("No argument has been passed.")
