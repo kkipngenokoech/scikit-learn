@@ -13,7 +13,6 @@
 import warnings
 
 import numpy as np
-from scipy.sparse import issparse
 
 from .base import _get_weights, _check_weights, NeighborsBase, KNeighborsMixin
 from .base import RadiusNeighborsMixin, SupervisedFloatMixin
@@ -78,14 +77,32 @@ class KNeighborsRegressor(NeighborsBase, KNeighborsMixin,
         minkowski, and with p=2 is equivalent to the standard Euclidean
         metric. See the documentation of the DistanceMetric class for a
         list of available metrics.
+        If metric is "precomputed", X is assumed to be a distance matrix and
+        must be square during fit. X may be a :term:`Glossary <sparse graph>`,
+        in which case only "nonzero" elements may be considered neighbors.
 
     metric_params : dict, optional (default = None)
         Additional keyword arguments for the metric function.
 
-    n_jobs : int, optional (default = 1)
+    n_jobs : int or None, optional (default=None)
         The number of parallel jobs to run for neighbors search.
-        If ``-1``, then the number of jobs is set to the number of CPU cores.
+        ``None`` means 1 unless in a :obj:`joblib.parallel_backend` context.
+        ``-1`` means using all processors. See :term:`Glossary <n_jobs>`
+        for more details.
         Doesn't affect :meth:`fit` method.
+
+    Attributes
+    ----------
+    effective_metric_ : string or callable
+        The distance metric to use. It will be same as the `metric` parameter
+        or a synonym of it, e.g. 'euclidean' if the `metric` parameter set to
+        'minkowski' and `p` parameter set to 2.
+
+    effective_metric_params_ : dict
+        Additional keyword arguments for the metric function. For most metrics
+        will be same with `metric_params` parameter, but may also contain the
+        `p` parameter value if the `effective_metric_` attribute is set to
+        'minkowski'.
 
     Examples
     --------
@@ -93,7 +110,7 @@ class KNeighborsRegressor(NeighborsBase, KNeighborsMixin,
     >>> y = [0, 0, 1, 1]
     >>> from sklearn.neighbors import KNeighborsRegressor
     >>> neigh = KNeighborsRegressor(n_neighbors=2)
-    >>> neigh.fit(X, y) # doctest: +ELLIPSIS
+    >>> neigh.fit(X, y)
     KNeighborsRegressor(...)
     >>> print(neigh.predict([[1.5]]))
     [0.5]
@@ -122,34 +139,34 @@ class KNeighborsRegressor(NeighborsBase, KNeighborsMixin,
 
     def __init__(self, n_neighbors=5, weights='uniform',
                  algorithm='auto', leaf_size=30,
-                 p=2, metric='minkowski', metric_params=None, n_jobs=1,
+                 p=2, metric='minkowski', metric_params=None, n_jobs=None,
                  **kwargs):
-        super(KNeighborsRegressor, self).__init__(
+        super().__init__(
               n_neighbors=n_neighbors,
               algorithm=algorithm,
               leaf_size=leaf_size, metric=metric, p=p,
               metric_params=metric_params, n_jobs=n_jobs, **kwargs)
         self.weights = _check_weights(weights)
 
+    @property
+    def _pairwise(self):
+        # For cross-validation routines to split data correctly
+        return self.metric == 'precomputed'
+
     def predict(self, X):
         """Predict the target for the provided data
 
         Parameters
         ----------
-        X : array-like, shape (n_query, n_features), \
-                or (n_query, n_indexed) if metric == 'precomputed'
+        X : array-like, shape (n_queries, n_features), \
+                or (n_queries, n_indexed) if metric == 'precomputed'
             Test samples.
 
         Returns
         -------
-        y : array of int, shape = [n_samples] or [n_samples, n_outputs]
+        y : array of int, shape = [n_queries] or [n_queries, n_outputs]
             Target values
         """
-        if issparse(X) and self.metric == 'precomputed':
-            raise ValueError(
-                "Sparse matrices not supported for prediction with "
-                "precomputed kernels. Densify your matrix."
-            )
         X = check_array(X, accept_sparse='csr')
 
         neigh_dist, neigh_ind = self.kneighbors(X)
@@ -234,13 +251,31 @@ class RadiusNeighborsRegressor(NeighborsBase, RadiusNeighborsMixin,
         minkowski, and with p=2 is equivalent to the standard Euclidean
         metric. See the documentation of the DistanceMetric class for a
         list of available metrics.
+        If metric is "precomputed", X is assumed to be a distance matrix and
+        must be square during fit. X may be a :term:`Glossary <sparse graph>`,
+        in which case only "nonzero" elements may be considered neighbors.
 
     metric_params : dict, optional (default = None)
         Additional keyword arguments for the metric function.
 
-    n_jobs : int, optional (default = 1)
+    n_jobs : int or None, optional (default=None)
         The number of parallel jobs to run for neighbors search.
-        If ``-1``, then the number of jobs is set to the number of CPU cores.
+        ``None`` means 1 unless in a :obj:`joblib.parallel_backend` context.
+        ``-1`` means using all processors. See :term:`Glossary <n_jobs>`
+        for more details.
+
+    Attributes
+    ----------
+    effective_metric_ : string or callable
+        The distance metric to use. It will be same as the `metric` parameter
+        or a synonym of it, e.g. 'euclidean' if the `metric` parameter set to
+        'minkowski' and `p` parameter set to 2.
+
+    effective_metric_params_ : dict
+        Additional keyword arguments for the metric function. For most metrics
+        will be same with `metric_params` parameter, but may also contain the
+        `p` parameter value if the `effective_metric_` attribute is set to
+        'minkowski'.
 
     Examples
     --------
@@ -248,7 +283,7 @@ class RadiusNeighborsRegressor(NeighborsBase, RadiusNeighborsMixin,
     >>> y = [0, 0, 1, 1]
     >>> from sklearn.neighbors import RadiusNeighborsRegressor
     >>> neigh = RadiusNeighborsRegressor(radius=1.0)
-    >>> neigh.fit(X, y) # doctest: +ELLIPSIS
+    >>> neigh.fit(X, y)
     RadiusNeighborsRegressor(...)
     >>> print(neigh.predict([[1.5]]))
     [0.5]
@@ -270,9 +305,9 @@ class RadiusNeighborsRegressor(NeighborsBase, RadiusNeighborsMixin,
 
     def __init__(self, radius=1.0, weights='uniform',
                  algorithm='auto', leaf_size=30,
-                 p=2, metric='minkowski', metric_params=None, n_jobs=1,
+                 p=2, metric='minkowski', metric_params=None, n_jobs=None,
                  **kwargs):
-        super(RadiusNeighborsRegressor, self).__init__(
+        super().__init__(
               radius=radius,
               algorithm=algorithm,
               leaf_size=leaf_size,
@@ -285,13 +320,13 @@ class RadiusNeighborsRegressor(NeighborsBase, RadiusNeighborsMixin,
 
         Parameters
         ----------
-        X : array-like, shape (n_query, n_features), \
-                or (n_query, n_indexed) if metric == 'precomputed'
+        X : array-like, shape (n_queries, n_features), \
+                or (n_queries, n_indexed) if metric == 'precomputed'
             Test samples.
 
         Returns
         -------
-        y : array of float, shape = [n_samples] or [n_samples, n_outputs]
+        y : array of float, shape = [n_queries] or [n_queries, n_outputs]
             Target values
         """
         X = check_array(X, accept_sparse='csr')
@@ -317,11 +352,10 @@ class RadiusNeighborsRegressor(NeighborsBase, RadiusNeighborsMixin,
                                if len(ind) else empty_obs
                                for (i, ind) in enumerate(neigh_ind)])
 
-        if np.max(np.isnan(y_pred)):
+        if np.any(np.isnan(y_pred)):
             empty_warning_msg = ("One or more samples have no neighbors "
                                  "within specified radius; predicting NaN.")
             warnings.warn(empty_warning_msg)
-
 
         if self._y.ndim == 1:
             y_pred = y_pred.ravel()

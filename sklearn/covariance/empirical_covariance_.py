@@ -10,7 +10,6 @@ Maximum likelihood covariance estimator.
 # License: BSD 3 clause
 
 # avoid division truncation
-from __future__ import division
 import warnings
 import numpy as np
 from scipy import linalg
@@ -57,10 +56,10 @@ def empirical_covariance(X, assume_centered=False):
         Data from which to compute the covariance estimate
 
     assume_centered : boolean
-        If True, data are not centered before computation.
+        If True, data will not be centered before computation.
         Useful when working with data whose mean is almost, but not exactly
         zero.
-        If False, data are centered before computation.
+        If False, data will be centered before computation.
 
     Returns
     -------
@@ -104,12 +103,33 @@ class EmpiricalCovariance(BaseEstimator):
 
     Attributes
     ----------
+    location_ : array-like, shape (n_features,)
+        Estimated location, i.e. the estimated mean.
+
     covariance_ : 2D ndarray, shape (n_features, n_features)
         Estimated covariance matrix
 
     precision_ : 2D ndarray, shape (n_features, n_features)
         Estimated pseudo-inverse matrix.
         (stored only if store_precision is True)
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from sklearn.covariance import EmpiricalCovariance
+    >>> from sklearn.datasets import make_gaussian_quantiles
+    >>> real_cov = np.array([[.8, .3],
+    ...                      [.3, .4]])
+    >>> rng = np.random.RandomState(0)
+    >>> X = rng.multivariate_normal(mean=[0, 0],
+    ...                             cov=real_cov,
+    ...                             size=500)
+    >>> cov = EmpiricalCovariance().fit(X)
+    >>> cov.covariance_
+    array([[0.7569..., 0.2818...],
+           [0.2818..., 0.3928...]])
+    >>> cov.location_
+    array([0.0622..., 0.0193...])
 
     """
     def __init__(self, store_precision=True, assume_centered=False):
@@ -159,7 +179,7 @@ class EmpiricalCovariance(BaseEstimator):
 
         Parameters
         ----------
-        X : array-like, shape = [n_samples, n_features]
+        X : array-like of shape (n_samples, n_features)
           Training data, where n_samples is the number of samples and
           n_features is the number of features.
 
@@ -188,7 +208,7 @@ class EmpiricalCovariance(BaseEstimator):
 
         Parameters
         ----------
-        X_test : array-like, shape = [n_samples, n_features]
+        X_test : array-like of shape (n_samples, n_features)
             Test data of which we compute the likelihood, where n_samples is
             the number of samples and n_features is the number of features.
             X_test is assumed to be drawn from the same distribution than
@@ -219,7 +239,7 @@ class EmpiricalCovariance(BaseEstimator):
 
         Parameters
         ----------
-        comp_cov : array-like, shape = [n_features, n_features]
+        comp_cov : array-like of shape (n_features, n_features)
             The covariance to compare with.
 
         norm : str
@@ -269,7 +289,7 @@ class EmpiricalCovariance(BaseEstimator):
 
         Parameters
         ----------
-        X : array-like, shape = [n_samples, n_features]
+        X : array-like of shape (n_samples, n_features)
             The observations, the Mahalanobis distances of the which we
             compute. Observations are assumed to be drawn from the same
             distribution than the data used in fit.

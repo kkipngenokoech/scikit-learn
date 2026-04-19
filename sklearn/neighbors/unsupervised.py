@@ -1,5 +1,4 @@
 """Unsupervised nearest neighbors learner"""
-
 from .base import NeighborsBase
 from .base import KNeighborsMixin
 from .base import RadiusNeighborsMixin
@@ -40,30 +39,13 @@ class NearestNeighbors(NeighborsBase, KNeighborsMixin,
         nature of the problem.
 
     metric : string or callable, default 'minkowski'
-        metric to use for distance computation. Any metric from scikit-learn
-        or scipy.spatial.distance can be used.
-
-        If metric is a callable function, it is called on each
-        pair of instances (rows) and the resulting value recorded. The callable
-        should take two arrays as input and return one value indicating the
-        distance between them. This works for Scipy's metrics, but is less
-        efficient than passing the metric name as a string.
-
-        Distance matrices are not supported.
-
-        Valid values for metric are:
-
-        - from scikit-learn: ['cityblock', 'cosine', 'euclidean', 'l1', 'l2',
-          'manhattan']
-
-        - from scipy.spatial.distance: ['braycurtis', 'canberra', 'chebyshev',
-          'correlation', 'dice', 'hamming', 'jaccard', 'kulsinski',
-          'mahalanobis', 'minkowski', 'rogerstanimoto', 'russellrao',
-          'seuclidean', 'sokalmichener', 'sokalsneath', 'sqeuclidean',
-          'yule']
-
-        See the documentation for scipy.spatial.distance for details on these
-        metrics.
+        the distance metric to use for the tree.  The default metric is
+        minkowski, and with p=2 is equivalent to the standard Euclidean
+        metric. See the documentation of the DistanceMetric class for a
+        list of available metrics.
+        If metric is "precomputed", X is assumed to be a distance matrix and
+        must be square during fit. X may be a :term:`Glossary <sparse graph>`,
+        in which case only "nonzero" elements may be considered neighbors.
 
     p : integer, optional (default = 2)
         Parameter for the Minkowski metric from
@@ -74,9 +56,19 @@ class NearestNeighbors(NeighborsBase, KNeighborsMixin,
     metric_params : dict, optional (default = None)
         Additional keyword arguments for the metric function.
 
-    n_jobs : int, optional (default = 1)
+    n_jobs : int or None, optional (default=None)
         The number of parallel jobs to run for neighbors search.
-        If ``-1``, then the number of jobs is set to the number of CPU cores.
+        ``None`` means 1 unless in a :obj:`joblib.parallel_backend` context.
+        ``-1`` means using all processors. See :term:`Glossary <n_jobs>`
+        for more details.
+
+    Attributes
+    ----------
+    effective_metric_ : string
+        Metric used to compute distances to neighbors.
+
+    effective_metric_params_ : dict
+        Parameters for the metric used to compute distances to neighbors.
 
     Examples
     --------
@@ -85,11 +77,10 @@ class NearestNeighbors(NeighborsBase, KNeighborsMixin,
       >>> samples = [[0, 0, 2], [1, 0, 0], [0, 0, 1]]
 
       >>> neigh = NearestNeighbors(2, 0.4)
-      >>> neigh.fit(samples)  #doctest: +ELLIPSIS
+      >>> neigh.fit(samples)
       NearestNeighbors(...)
 
       >>> neigh.kneighbors([[0, 0, 1.3]], 2, return_distance=False)
-      ... #doctest: +ELLIPSIS
       array([[2, 0]]...)
 
       >>> nbrs = neigh.radius_neighbors([[0, 0, 1.3]], 0.4, return_distance=False)
@@ -114,8 +105,8 @@ class NearestNeighbors(NeighborsBase, KNeighborsMixin,
 
     def __init__(self, n_neighbors=5, radius=1.0,
                  algorithm='auto', leaf_size=30, metric='minkowski',
-                 p=2, metric_params=None, n_jobs=1, **kwargs):
-        super(NearestNeighbors, self).__init__(
+                 p=2, metric_params=None, n_jobs=None, **kwargs):
+        super().__init__(
               n_neighbors=n_neighbors,
               radius=radius,
               algorithm=algorithm,
