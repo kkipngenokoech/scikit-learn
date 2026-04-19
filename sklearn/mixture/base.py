@@ -73,8 +73,17 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
 
     def __init__(self, n_components, tol, reg_covar,
                  max_iter, n_init, init_params, random_state, warm_start,
-                 verbose, verbose_interval):
+                 verbose, verbose_interval, n_clusters=None):
+        # Handle n_clusters as alias for n_components for clusterer compatibility
+        if n_clusters is not None and n_components != 1:
+            raise ValueError("Cannot specify both 'n_components' and 'n_clusters'. "
+                           "Use 'n_clusters' for clusterer compatibility or 'n_components' "
+                           "for mixture model interface.")
+        if n_clusters is not None:
+            n_components = n_clusters
+        
         self.n_components = n_components
+        self.n_clusters = n_components  # Alias for clusterer compatibility
         self.tol = tol
         self.reg_covar = reg_covar
         self.max_iter = max_iter
@@ -239,6 +248,9 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
 
         self._set_parameters(best_params)
         self.n_iter_ = best_n_iter
+        
+        # Store labels_ for clusterer compatibility
+        self.labels_ = self.predict(X)
 
         return self
 
@@ -408,6 +420,28 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
                            for j, sample in enumerate(n_samples_comp)])
 
         return (X, y)
+
+    def fit_predict(self, X, y=None):
+        """Fit the model and predict cluster labels for the data.
+
+        This method fits the model to the data and returns the cluster labels
+        for the training data, providing a clusterer-compatible interface.
+
+        Parameters
+        ----------
+        X : array-like, shape (n_samples, n_features)
+            List of n_features-dimensional data points. Each row
+            corresponds to a single data point.
+
+        y : Ignored
+            Not used, present here for API consistency by convention.
+
+        Returns
+        -------
+        labels : array, shape (n_samples,)
+            Component labels for each point.
+        """
+        return self.fit(X, y).labels_
 
     def _estimate_weighted_log_prob(self, X):
         """Estimate the weighted log-probabilities, log P(X | Z) + log weights.
