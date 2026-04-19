@@ -466,6 +466,21 @@ def check_array(array, accept_sparse=False, accept_large_sparse=True,
         # not a data type (e.g. a column named dtype in a pandas DataFrame)
         dtype_orig = None
 
+    # Store original dtype for pandas DataFrames to enable proper warning
+    # when warn_on_dtype is True
+    if hasattr(array, 'dtypes'):  # pandas DataFrame
+        # For DataFrames, we need to check if all columns have the same dtype
+        # If mixed dtypes, we'll use object as the original dtype
+        unique_dtypes = array.dtypes.unique()
+        if len(unique_dtypes) == 1:
+            pandas_orig_dtype = unique_dtypes[0]
+        else:
+            pandas_orig_dtype = np.dtype('object')
+    elif hasattr(array, 'dtype') and hasattr(array.dtype, 'kind'):  # pandas Series
+        pandas_orig_dtype = array.dtype
+    else:
+        pandas_orig_dtype = None
+
     if dtype_numeric:
         if dtype_orig is not None and dtype_orig.kind == "O":
             # if input is object, convert to float.
@@ -520,6 +535,13 @@ def check_array(array, accept_sparse=False, accept_large_sparse=True,
         # result is that np.array(..) produces an array of complex dtype
         # and we need to catch and raise exception for such cases.
         _ensure_no_complex_data(array)
+
+        # Check for dtype conversion warning for pandas inputs
+        if (warn_on_dtype and pandas_orig_dtype is not None and 
+            pandas_orig_dtype != array.dtype):
+            msg = ("Data with input dtype {} was converted to {}{}."
+                   .format(pandas_orig_dtype, array.dtype, context))
+            warnings.warn(msg, DataConversionWarning, stacklevel=2)
 
         if ensure_2d:
             # If input is scalar raise error
