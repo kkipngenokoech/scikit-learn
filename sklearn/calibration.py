@@ -33,6 +33,7 @@ from .utils import (
     indexable,
     check_matplotlib_support,
 )
+from .utils._array_api import _convert_to_numpy
 
 from .utils.multiclass import check_classification_targets
 from .utils.parallel import delayed, Parallel
