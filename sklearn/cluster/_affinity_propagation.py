@@ -152,6 +152,7 @@ def affinity_propagation(S, preference=None, convergence_iter=15, max_iter=200,
 
     ind = np.arange(n_samples)
 
+    converged = False
     for it in range(max_iter):
         # tmp = A + S; compute responsibilities
         np.add(A, S, tmp)
@@ -193,7 +194,8 @@ def affinity_propagation(S, preference=None, convergence_iter=15, max_iter=200,
             se = np.sum(e, axis=1)
             unconverged = (np.sum((se == convergence_iter) + (se == 0))
                            != n_samples)
-            if (not unconverged and (K > 0)) or (it == max_iter):
+            if not unconverged and (K > 0):
+                converged = True
                 if verbose:
                     print("Converged after %d iterations." % it)
                 break
@@ -204,7 +206,7 @@ def affinity_propagation(S, preference=None, convergence_iter=15, max_iter=200,
     I = np.flatnonzero(E)
     K = I.size  # Identify exemplars
 
-    if K > 0:
+    if K > 0 and converged:
         c = np.argmax(S[:, I], axis=1)
         c[I] = np.arange(K)  # Identify clusters
         # Refine the final set of exemplars and clusters and return results
@@ -220,10 +222,11 @@ def affinity_propagation(S, preference=None, convergence_iter=15, max_iter=200,
         cluster_centers_indices = np.unique(labels)
         labels = np.searchsorted(cluster_centers_indices, labels)
     else:
-        warnings.warn("Affinity propagation did not converge, this model "
-                      "will not have any cluster centers.", ConvergenceWarning)
+        if not converged:
+            warnings.warn("Affinity propagation did not converge, this model "
+                          "will not have any cluster centers.", ConvergenceWarning)
         labels = np.array([-1] * n_samples)
-        cluster_centers_indices = []
+        cluster_centers_indices = np.array([])
 
     if return_n_iter:
         return cluster_centers_indices, labels, it + 1
@@ -289,6 +292,9 @@ class AffinityPropagation(ClusterMixin, BaseEstimator):
 
     n_iter_ : int
         Number of iterations taken to converge.
+
+    converged_ : bool
+        True if the algorithm converged, False otherwise.
 
     Examples
     --------
@@ -388,8 +394,14 @@ class AffinityPropagation(ClusterMixin, BaseEstimator):
                 convergence_iter=self.convergence_iter, damping=self.damping,
                 copy=self.copy, verbose=self.verbose, return_n_iter=True)
 
+        # Set converged_ attribute based on whether we have valid cluster centers
+        self.converged_ = len(self.cluster_centers_indices_) > 0
+
         if self.affinity != "precomputed":
-            self.cluster_centers_ = X[self.cluster_centers_indices_].copy()
+            if self.converged_:
+                self.cluster_centers_ = X[self.cluster_centers_indices_].copy()
+            else:
+                self.cluster_centers_ = np.array([]).reshape(0, X.shape[1])
 
         return self
 
