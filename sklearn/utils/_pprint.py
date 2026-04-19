@@ -66,6 +66,7 @@ BaseEstimator.__repr__ for pretty-printing estimators"""
 from inspect import signature
 import pprint
 from collections import OrderedDict
+import numpy as np
 
 from ..base import BaseEstimator
 from .._config import get_config
@@ -84,6 +85,22 @@ class KeyValTupleParam(KeyValTuple):
     pass
 
 
+def _safe_params_equal(a, b):
+    """Safely compare two parameter values, handling numpy arrays."""
+    try:
+        # Handle numpy arrays
+        if hasattr(a, 'shape') or hasattr(b, 'shape'):
+            return np.array_equal(a, b)
+        # Handle regular values
+        return a == b
+    except (ValueError, TypeError):
+        # Fallback for other array-like objects or incompatible types
+        try:
+            return np.array_equal(a, b)
+        except (ValueError, TypeError):
+            return False
+
+
 def _changed_params(estimator):
     """Return dict (param_name: value) of parameters that were given to
     estimator with non-default values."""
@@ -95,7 +112,7 @@ def _changed_params(estimator):
     init_params = signature(init_func).parameters
     init_params = {name: param.default for name, param in init_params.items()}
     for k, v in params.items():
-        if (v != init_params[k] and
+        if (not _safe_params_equal(v, init_params[k]) and
                 not (is_scalar_nan(init_params[k]) and is_scalar_nan(v))):
             filtered_params[k] = v
     return filtered_params
