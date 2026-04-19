@@ -178,6 +178,20 @@ class KernelPCA(BaseEstimator, TransformerMixin, _UnstableOn32BitMixin):
                                 filter_params=True, n_jobs=self.n_jobs,
                                 **params)
 
+    def _normalize_eigenvector_signs(self, eigenvectors):
+        """Normalize eigenvector signs for deterministic results.
+        
+        For each eigenvector, ensure the component with the largest absolute
+        value is positive. This provides a consistent sign convention.
+        """
+        for i in range(eigenvectors.shape[1]):
+            # Find the index of the component with largest absolute value
+            max_abs_idx = np.argmax(np.abs(eigenvectors[:, i]))
+            # If that component is negative, flip the entire eigenvector
+            if eigenvectors[max_abs_idx, i] < 0:
+                eigenvectors[:, i] *= -1
+        return eigenvectors
+
     def _fit_transform(self, K):
         """ Fit's using kernel K"""
         # center kernel
@@ -214,6 +228,9 @@ class KernelPCA(BaseEstimator, TransformerMixin, _UnstableOn32BitMixin):
         indices = self.lambdas_.argsort()[::-1]
         self.lambdas_ = self.lambdas_[indices]
         self.alphas_ = self.alphas_[:, indices]
+
+        # normalize eigenvector signs for deterministic results
+        self.alphas_ = self._normalize_eigenvector_signs(self.alphas_)
 
         # remove eigenvectors with a zero eigenvalue
         if self.remove_zero_eig or self.n_components is None:
