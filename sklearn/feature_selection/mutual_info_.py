@@ -247,7 +247,7 @@ def _estimate_mi(X, y, discrete_features='auto', discrete_target=False,
     X, y = check_X_y(X, y, accept_sparse='csc', y_numeric=not discrete_target)
     n_samples, n_features = X.shape
 
-    if discrete_features == 'auto':
+    if isinstance(discrete_features, str) and discrete_features == 'auto':
         discrete_features = issparse(X)
 
     if isinstance(discrete_features, bool):
