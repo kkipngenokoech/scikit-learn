@@ -1,23 +1,23 @@
-"""
-The :mod:`sklearn.feature_extraction.image` submodule gathers utilities to
-extract features from images.
-"""
+"""Utilities to extract features from images."""
 
-# Authors: Emmanuelle Gouillart <emmanuelle.gouillart@normalesup.org>
-#          Gael Varoquaux <gael.varoquaux@normalesup.org>
-#          Olivier Grisel
-#          Vlad Niculae
-# License: BSD 3 clause
+# Authors: The scikit-learn developers
+# SPDX-License-Identifier: BSD-3-Clause
 
 from itertools import product
 from numbers import Integral, Number, Real
-import numpy as np
-from scipy import sparse
-from numpy.lib.stride_tricks import as_strided
 
-from ..base import BaseEstimator, TransformerMixin
-from ..utils import check_array, check_random_state
-from ..utils._param_validation import Hidden, Interval, validate_params
+import numpy as np
+from numpy.lib.stride_tricks import as_strided
+from scipy import sparse
+
+from sklearn.base import BaseEstimator, TransformerMixin, _fit_context
+from sklearn.utils import _align_api_if_sparse, check_array, check_random_state
+from sklearn.utils._param_validation import (
+    Hidden,
+    Interval,
+    RealNotInt,
+    validate_params,
+)
 
 __all__ = [
     "PatchExtractor",
@@ -26,6 +26,8 @@ __all__ = [
     "img_to_graph",
     "reconstruct_from_patches_2d",
 ]
+
+from sklearn.utils.validation import validate_data
 
 ###############################################################################
 # From an image to a graph
@@ -75,7 +77,7 @@ def _mask_edges_weights(mask, edges, weights=None):
     """Apply a mask to edges (weighted or not)"""
     inds = np.arange(mask.size)
     inds = inds[mask.ravel()]
-    ind_mask = np.logical_and(np.in1d(edges[0], inds), np.in1d(edges[1], inds))
+    ind_mask = np.logical_and(np.isin(edges[0], inds), np.isin(edges[1], inds))
     edges = edges[:, ind_mask]
     if weights is not None:
         weights = weights[ind_mask]
@@ -92,7 +94,7 @@ def _mask_edges_weights(mask, edges, weights=None):
 
 
 def _to_graph(
-    n_x, n_y, n_z, mask=None, img=None, return_as=sparse.coo_matrix, dtype=None
+    n_x, n_y, n_z, mask=None, img=None, return_as=sparse.coo_array, dtype=None
 ):
     """Auxiliary function for img_to_graph and grid_to_graph"""
     edges = _make_edges_3d(n_x, n_y, n_z)
@@ -125,7 +127,7 @@ def _to_graph(
     diag_idx = np.arange(n_voxels)
     i_idx = np.hstack((edges[0], edges[1]))
     j_idx = np.hstack((edges[1], edges[0]))
-    graph = sparse.coo_matrix(
+    graph = sparse.coo_array(
         (
             np.hstack((weights, weights, diag)),
             (np.hstack((i_idx, diag_idx)), np.hstack((j_idx, diag_idx))),
@@ -135,7 +137,7 @@ def _to_graph(
     )
     if return_as is np.ndarray:
         return graph.toarray()
-    return return_as(graph)
+    return _align_api_if_sparse(return_as(graph))
 
 
 @validate_params(
@@ -144,9 +146,10 @@ def _to_graph(
         "mask": [None, np.ndarray],
         "return_as": [type],
         "dtype": "no_validation",  # validation delegated to numpy
-    }
+    },
+    prefer_skip_nested_validation=True,
 )
-def img_to_graph(img, *, mask=None, return_as=sparse.coo_matrix, dtype=None):
+def img_to_graph(img, *, mask=None, return_as=sparse.coo_array, dtype=None):
     """Graph of the pixel-to-pixel gradient connections.
 
     Edges are weighted with the gradient values.
@@ -162,7 +165,7 @@ def img_to_graph(img, *, mask=None, return_as=sparse.coo_matrix, dtype=None):
         An optional mask of the image, to consider only part of the
         pixels.
     return_as : np.ndarray or a sparse matrix class, \
-            default=sparse.coo_matrix
+            default=sparse.coo_array
         The class to use to build the returned adjacency matrix.
     dtype : dtype, default=None
         The data of the returned sparse matrix. By default it is the
@@ -173,14 +176,16 @@ def img_to_graph(img, *, mask=None, return_as=sparse.coo_matrix, dtype=None):
     graph : ndarray or a sparse matrix class
         The computed adjacency matrix.
 
-    Notes
-    -----
-    For scikit-learn versions 0.14.1 and prior, return_as=np.ndarray was
-    handled by returning a dense np.matrix instance.  Going forward, np.ndarray
-    returns an np.ndarray, as expected.
-
-    For compatibility, user code relying on this method should wrap its
-    calls in ``np.asarray`` to avoid type issues.
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from sklearn.feature_extraction.image import img_to_graph
+    >>> img = np.array([[0, 0], [0, 1]])
+    >>> img_to_graph(img, return_as=np.ndarray)
+    array([[0, 0, 0, 0],
+           [0, 0, 0, 1],
+           [0, 0, 0, 1],
+           [0, 1, 1, 1]])
     """
     img = np.atleast_3d(img)
     n_x, n_y, n_z = img.shape
@@ -195,14 +200,15 @@ def img_to_graph(img, *, mask=None, return_as=sparse.coo_matrix, dtype=None):
         "mask": [None, np.ndarray],
         "return_as": [type],
         "dtype": "no_validation",  # validation delegated to numpy
-    }
+    },
+    prefer_skip_nested_validation=True,
 )
-def grid_to_graph(
-    n_x, n_y, n_z=1, *, mask=None, return_as=sparse.coo_matrix, dtype=int
-):
+def grid_to_graph(n_x, n_y, n_z=1, *, mask=None, return_as=sparse.coo_array, dtype=int):
     """Graph of the pixel-to-pixel connections.
 
     Edges exist if 2 voxels are connected.
+
+    Read more in the :ref:`User Guide <connectivity_graph_image>`.
 
     Parameters
     ----------
@@ -216,7 +222,7 @@ def grid_to_graph(
         An optional mask of the image, to consider only part of the
         pixels.
     return_as : np.ndarray or a sparse matrix class, \
-            default=sparse.coo_matrix
+            default=sparse.coo_array
         The class to use to build the returned adjacency matrix.
     dtype : dtype, default=int
         The data of the returned sparse matrix. By default it is int.
@@ -226,14 +232,20 @@ def grid_to_graph(
     graph : np.ndarray or a sparse matrix class
         The computed adjacency matrix.
 
-    Notes
-    -----
-    For scikit-learn versions 0.14.1 and prior, return_as=np.ndarray was
-    handled by returning a dense np.matrix instance.  Going forward, np.ndarray
-    returns an np.ndarray, as expected.
-
-    For compatibility, user code relying on this method should wrap its
-    calls in ``np.asarray`` to avoid type issues.
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from sklearn.feature_extraction.image import grid_to_graph
+    >>> shape_img = (4, 4, 1)
+    >>> mask = np.zeros(shape=shape_img, dtype=bool)
+    >>> mask[[1, 2], [1, 2], :] = True
+    >>> graph = grid_to_graph(*shape_img, mask=mask)
+    >>> print(graph)
+    <COOrdinate sparse matrix of dtype 'int64'
+      with 2 stored elements and shape (2, 2)>
+      Coords	Values
+      (0, 0)    1
+      (1, 1)    1
     """
     return _to_graph(n_x, n_y, n_z, mask=mask, return_as=return_as, dtype=dtype)
 
@@ -258,9 +270,9 @@ def _compute_n_patches(i_h, i_w, p_h, p_w, max_patches=None):
     p_w : int
         The width of a patch
     max_patches : int or float, default=None
-        The maximum number of patches to extract. If max_patches is a float
+        The maximum number of patches to extract. If `max_patches` is a float
         between 0 and 1, it is taken to be a proportion of the total number
-        of patches.
+        of patches. If `max_patches` is None, all possible patches are extracted.
     """
     n_h = i_h - p_h + 1
     n_w = i_w - p_w + 1
@@ -343,12 +355,13 @@ def _extract_patches(arr, patch_shape=8, extraction_step=1):
         "image": [np.ndarray],
         "patch_size": [tuple, list],
         "max_patches": [
-            Interval(Real, left=0, right=1, closed="neither"),
-            Interval(Integral, left=1, right=None, closed="left"),
+            Interval(RealNotInt, 0, 1, closed="neither"),
+            Interval(Integral, 1, None, closed="left"),
             None,
         ],
         "random_state": ["random_state"],
-    }
+    },
+    prefer_skip_nested_validation=True,
 )
 def extract_patches_2d(image, patch_size, *, max_patches=None, random_state=None):
     """Reshape a 2D image into a collection of patches.
@@ -370,7 +383,8 @@ def extract_patches_2d(image, patch_size, *, max_patches=None, random_state=None
     max_patches : int or float, default=None
         The maximum number of patches to extract. If `max_patches` is a float
         between 0 and 1, it is taken to be a proportion of the total number
-        of patches.
+        of patches. If `max_patches` is None it corresponds to the total number
+        of patches that can be extracted.
 
     random_state : int, RandomState instance, default=None
         Determines the random number generator used for random sampling when
@@ -447,7 +461,10 @@ def extract_patches_2d(image, patch_size, *, max_patches=None, random_state=None
         return patches
 
 
-@validate_params({"patches": [np.ndarray], "image_size": [tuple, Hidden(list)]})
+@validate_params(
+    {"patches": [np.ndarray], "image_size": [tuple, Hidden(list)]},
+    prefer_skip_nested_validation=True,
+)
 def reconstruct_from_patches_2d(patches, image_size):
     """Reconstruct the image from all of its patches.
 
@@ -473,6 +490,23 @@ def reconstruct_from_patches_2d(patches, image_size):
     -------
     image : ndarray of shape image_size
         The reconstructed image.
+
+    Examples
+    --------
+    >>> from sklearn.datasets import load_sample_image
+    >>> from sklearn.feature_extraction import image
+    >>> one_image = load_sample_image("china.jpg")
+    >>> print('Image shape: {}'.format(one_image.shape))
+    Image shape: (427, 640, 3)
+    >>> image_patches = image.extract_patches_2d(image=one_image, patch_size=(10, 10))
+    >>> print('Patches shape: {}'.format(image_patches.shape))
+    Patches shape: (263758, 10, 10, 3)
+    >>> image_reconstructed = image.reconstruct_from_patches_2d(
+    ...     patches=image_patches,
+    ...     image_size=one_image.shape
+    ... )
+    >>> print(f"Reconstructed shape: {image_reconstructed.shape}")
+    Reconstructed shape: (427, 640, 3)
     """
     i_h, i_w = image_size[:2]
     p_h, p_w = patches.shape[1:3]
@@ -501,12 +535,14 @@ class PatchExtractor(TransformerMixin, BaseEstimator):
     Parameters
     ----------
     patch_size : tuple of int (patch_height, patch_width), default=None
-        The dimensions of one patch.
+        The dimensions of one patch. If set to None, the patch size will be
+        automatically set to `(img_height // 10, img_width // 10)`, where
+        `img_height` and `img_width` are the dimensions of the input images.
 
     max_patches : int or float, default=None
         The maximum number of patches per image to extract. If `max_patches` is
         a float in (0, 1), it is taken to mean a proportion of the total number
-        of patches.
+        of patches. If set to None, extract all possible patches.
 
     random_state : int, RandomState instance, default=None
         Determines the random number generator used for random sampling when
@@ -530,19 +566,23 @@ class PatchExtractor(TransformerMixin, BaseEstimator):
     >>> from sklearn.feature_extraction import image
     >>> # Use the array data from the second image in this dataset:
     >>> X = load_sample_images().images[1]
+    >>> X = X[None, ...]
     >>> print(f"Image shape: {X.shape}")
-    Image shape: (427, 640, 3)
-    >>> pe = image.PatchExtractor(patch_size=(2, 2))
+    Image shape: (1, 427, 640, 3)
+    >>> pe = image.PatchExtractor(patch_size=(10, 10))
     >>> pe_trans = pe.transform(X)
     >>> print(f"Patches shape: {pe_trans.shape}")
-    Patches shape: (545706, 2, 2)
+    Patches shape: (263758, 10, 10, 3)
+    >>> X_reconstructed = image.reconstruct_from_patches_2d(pe_trans, X.shape[1:])
+    >>> print(f"Reconstructed shape: {X_reconstructed.shape}")
+    Reconstructed shape: (427, 640, 3)
     """
 
     _parameter_constraints: dict = {
         "patch_size": [tuple, None],
         "max_patches": [
             None,
-            Interval(Real, 0, 1, closed="neither"),
+            Interval(RealNotInt, 0, 1, closed="neither"),
             Interval(Integral, 1, None, closed="left"),
         ],
         "random_state": ["random_state"],
@@ -553,6 +593,7 @@ class PatchExtractor(TransformerMixin, BaseEstimator):
         self.max_patches = max_patches
         self.random_state = random_state
 
+    @_fit_context(prefer_skip_nested_validation=True)
     def fit(self, X, y=None):
         """Only validate the parameters of the estimator.
 
@@ -575,7 +616,6 @@ class PatchExtractor(TransformerMixin, BaseEstimator):
         self : object
             Returns the instance itself.
         """
-        self._validate_params()
         return self
 
     def transform(self, X):
@@ -597,7 +637,8 @@ class PatchExtractor(TransformerMixin, BaseEstimator):
             `n_patches` is either `n_samples * max_patches` or the total
             number of patches that can be extracted.
         """
-        X = self._validate_data(
+        X = validate_data(
+            self,
             X=X,
             ensure_2d=False,
             allow_nd=True,
@@ -612,8 +653,8 @@ class PatchExtractor(TransformerMixin, BaseEstimator):
         else:
             if len(self.patch_size) != 2:
                 raise ValueError(
-                    f"patch_size must be a tuple of two integers. Got {self.patch_size}"
-                    " instead."
+                    "patch_size must be a tuple of two integers. Got"
+                    f" {self.patch_size} instead."
                 )
             patch_size = self.patch_size
 
@@ -641,5 +682,9 @@ class PatchExtractor(TransformerMixin, BaseEstimator):
             )
         return patches
 
-    def _more_tags(self):
-        return {"X_types": ["3darray"], "stateless": True}
+    def __sklearn_tags__(self):
+        tags = super().__sklearn_tags__()
+        tags.input_tags.two_d_array = False
+        tags.input_tags.three_d_array = True
+        tags.requires_fit = False
+        return tags

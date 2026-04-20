@@ -10,39 +10,49 @@ This format is used as the default format for both svmlight and the
 libsvm command line programs.
 """
 
-# Authors: Mathieu Blondel <mathieu@mblondel.org>
-#          Lars Buitinck
-#          Olivier Grisel <olivier.grisel@ensta.org>
-# License: BSD 3 clause
+# Authors: The scikit-learn developers
+# SPDX-License-Identifier: BSD-3-Clause
 
-from contextlib import closing
-import io
 import os.path
+from contextlib import closing
+from numbers import Integral
 
 import numpy as np
 import scipy.sparse as sp
 
-from .. import __version__
-
-from ..utils import check_array, IS_PYPY
-from ..utils._param_validation import validate_params, HasMethods
-
-if not IS_PYPY:
-    from ._svmlight_format_fast import (
-        _load_svmlight_file,
-        _dump_svmlight_file,
-    )
-else:
-
-    def _load_svmlight_file(*args, **kwargs):
-        raise NotImplementedError(
-            "load_svmlight_file is currently not "
-            "compatible with PyPy (see "
-            "https://github.com/scikit-learn/scikit-learn/issues/11543 "
-            "for the status updates)."
-        )
+from sklearn import __version__
+from sklearn.datasets._svmlight_format_fast import (
+    _dump_svmlight_file,
+    _load_svmlight_file,
+)
+from sklearn.utils import check_array
+from sklearn.utils._param_validation import (
+    HasMethods,
+    Interval,
+    StrOptions,
+    validate_params,
+)
+from sklearn.utils._sparse import _align_api_if_sparse
 
 
+@validate_params(
+    {
+        "f": [
+            str,
+            Interval(Integral, 0, None, closed="left"),
+            os.PathLike,
+            HasMethods("read"),
+        ],
+        "n_features": [Interval(Integral, 1, None, closed="left"), None],
+        "dtype": "no_validation",  # delegate validation to numpy
+        "multilabel": ["boolean"],
+        "zero_based": ["boolean", StrOptions({"auto"})],
+        "query_id": ["boolean"],
+        "offset": [Interval(Integral, 0, None, closed="left")],
+        "length": [Integral],
+    },
+    prefer_skip_nested_validation=True,
+)
 def load_svmlight_file(
     f,
     *,
@@ -81,8 +91,7 @@ def load_svmlight_file(
 
     This implementation is written in Cython and is reasonably fast.
     However, a faster API-compatible loader is also available at:
-
-      https://github.com/mblondel/svmlight-loader
+    https://github.com/mblondel/svmlight-loader
 
     Parameters
     ----------
@@ -159,7 +168,7 @@ def load_svmlight_file(
     To use joblib.Memory to cache the svmlight file::
 
         from joblib import Memory
-        from .datasets import load_svmlight_file
+        from sklearn.datasets import load_svmlight_file
         mem = Memory("./mycache")
 
         @mem.cache
@@ -185,7 +194,7 @@ def load_svmlight_file(
 
 def _gen_open(f):
     if isinstance(f, int):  # file descriptor
-        return io.open(f, "rb", closefd=False)
+        return open(f, "rb", closefd=False)
     elif isinstance(f, os.PathLike):
         f = os.fspath(f)
     elif not isinstance(f, str):
@@ -227,6 +236,25 @@ def _open_and_load(f, dtype, multilabel, zero_based, query_id, offset=0, length=
     return data, indices, indptr, labels, query
 
 
+@validate_params(
+    {
+        "files": [
+            "array-like",
+            str,
+            os.PathLike,
+            HasMethods("read"),
+            Interval(Integral, 0, None, closed="left"),
+        ],
+        "n_features": [Interval(Integral, 1, None, closed="left"), None],
+        "dtype": "no_validation",  # delegate validation to numpy
+        "multilabel": ["boolean"],
+        "zero_based": ["boolean", StrOptions({"auto"})],
+        "query_id": ["boolean"],
+        "offset": [Interval(Integral, 0, None, closed="left")],
+        "length": [Integral],
+    },
+    prefer_skip_nested_validation=True,
+)
 def load_svmlight_files(
     files,
     *,
@@ -323,6 +351,23 @@ def load_svmlight_files(
     matrix X_test, it is essential that X_train and X_test have the same
     number of features (X_train.shape[1] == X_test.shape[1]). This may not
     be the case if you load the files individually with load_svmlight_file.
+
+    Examples
+    --------
+    To use joblib.Memory to cache the svmlight file::
+
+        from joblib import Memory
+        from sklearn.datasets import load_svmlight_file
+        mem = Memory("./mycache")
+
+        @mem.cache
+        def get_data():
+            data_train, target_train, data_test, target_test = load_svmlight_files(
+                ["svmlight_file_train", "svmlight_file_test"]
+            )
+            return data_train, target_train, data_test, target_test
+
+        X_train, y_train, X_test, y_test = get_data()
     """
     if (offset != 0 or length > 0) and zero_based == "auto":
         # disable heuristic search to avoid getting inconsistent results on
@@ -345,10 +390,8 @@ def load_svmlight_files(
         for f in files
     ]
 
-    if (
-        zero_based is False
-        or zero_based == "auto"
-        and all(len(tmp[1]) and np.min(tmp[1]) > 0 for tmp in r)
+    if zero_based is False or (
+        zero_based == "auto" and all(len(tmp[1]) and np.min(tmp[1]) > 0 for tmp in r)
     ):
         for _, indices, _, _, _ in r:
             indices -= 1
@@ -367,9 +410,9 @@ def load_svmlight_files(
     result = []
     for data, indices, indptr, y, query_values in r:
         shape = (indptr.shape[0] - 1, n_features)
-        X = sp.csr_matrix((data, indices, indptr), shape)
+        X = sp.csr_array((data, indices, indptr), shape)
         X.sort_indices()
-        result += X, y
+        result += _align_api_if_sparse(X), y
         if query_id:
             result.append(query_values)
 
@@ -414,7 +457,8 @@ def _dump_svmlight(X, y, f, multilabel, one_based, comment, query_id):
         "comment": [str, bytes, None],
         "query_id": ["array-like", None],
         "multilabel": ["boolean"],
-    }
+    },
+    prefer_skip_nested_validation=True,
 )
 def dump_svmlight_file(
     X,
@@ -472,6 +516,13 @@ def dump_svmlight_file(
 
         .. versionadded:: 0.17
            parameter `multilabel` to support multilabel datasets.
+
+    Examples
+    --------
+    >>> from sklearn.datasets import dump_svmlight_file, make_classification
+    >>> X, y = make_classification(random_state=0)
+    >>> output_file = "my_dataset.svmlight"
+    >>> dump_svmlight_file(X, y, output_file)  # doctest: +SKIP
     """
     if comment is not None:
         # Convert comment string to list of lines in UTF-8.
