@@ -33,6 +33,7 @@ from .utils import (
     indexable,
     check_matplotlib_support,
 )
+from .utils._optional_dependencies import check_pandas_support
 
 from .utils.multiclass import check_classification_targets
 from .utils.parallel import delayed, Parallel
